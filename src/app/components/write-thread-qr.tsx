@@ -1,7 +1,5 @@
 /* eslint-disable @next/next/no-img-element */
 
-import Link from "next/link";
-
 const WRITE_THREAD_PATH = "/tulis";
 const PRODUCTION_WRITE_THREAD_URL = "https://dinding-reuni.vercel.app/tulis";
 const QR_SERVICE_URL = "https://api.qrserver.com/v1/create-qr-code/";
@@ -42,11 +40,9 @@ export default function WriteThreadQr() {
       </div>
 
       <p className="write-thread-qr-title">Scan Buat Nulis Thread</p>
-      <p className="write-thread-qr-subtitle">Pojok kanan bawah, tetap di tempat saat scroll.</p>
-
-      <Link href={WRITE_THREAD_PATH} className="write-thread-qr-link">
-        Tulis Thread
-      </Link>
+      <p className="write-thread-qr-subtitle">
+        Cukup scan barcode ini buat nambah thread baru.
+      </p>
     </aside>
   );
 }
