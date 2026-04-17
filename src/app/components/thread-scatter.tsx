@@ -3,6 +3,10 @@
 import type { CSSProperties, KeyboardEvent, SyntheticEvent } from "react";
 import { useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import {
+  parseImageOrientationFromUrl,
+  type ImageOrientation,
+} from "@/lib/image-orientation";
 import type { ThreadsPerSegment } from "@/lib/thread-layout";
 
 type NoteMedia =
@@ -50,7 +54,6 @@ type ThreadScatterProps = {
 };
 
 type HighlightKind = "long" | "short";
-type ImageOrientation = "portrait" | "landscape";
 
 type ThreadApiItem = {
   id: string;
@@ -801,7 +804,10 @@ export default function ThreadScatter({
         };
 
         const hasMedia = note.media.kind !== "none";
-        const imageOrientation = imageOrientationMap[note.id] ?? "landscape";
+        const imageOrientation =
+          note.media.kind === "image"
+            ? imageOrientationMap[note.id] ?? parseImageOrientationFromUrl(note.media.imageUrl) ?? "landscape"
+            : "landscape";
 
         return (
           <article

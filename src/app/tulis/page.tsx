@@ -2,7 +2,20 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ChangeEvent, FormEvent, MouseEvent, TouchEvent, useMemo, useRef, useState } from "react";
+import {
+  ChangeEvent,
+  FormEvent,
+  MouseEvent,
+  SyntheticEvent,
+  TouchEvent,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+import {
+  withImageOrientationMarker,
+  type ImageOrientation,
+} from "@/lib/image-orientation";
 
 type MediaType = "none" | "image" | "music";
 
@@ -42,6 +55,8 @@ export default function TulisThreadPage() {
   const [mediaType, setMediaType] = useState<MediaType>("none");
 
   const [uploadedImageUrl, setUploadedImageUrl] = useState("");
+  const [uploadedImageOrientation, setUploadedImageOrientation] =
+    useState<ImageOrientation>("landscape");
   const [imageUploadStatus, setImageUploadStatus] = useState("");
   const [isUploadingImage, setIsUploadingImage] = useState(false);
 
@@ -87,6 +102,7 @@ export default function TulisThreadPage() {
     setMediaType("none");
 
     setUploadedImageUrl("");
+    setUploadedImageOrientation("landscape");
     setImageUploadStatus("");
     setIsUploadingImage(false);
 
@@ -120,17 +136,21 @@ export default function TulisThreadPage() {
         url?: string;
         error?: string;
         optimized?: boolean;
+        orientation?: ImageOrientation;
         originalSize?: number;
         finalSize?: number;
       };
 
       if (!response.ok || !data.url) {
         setUploadedImageUrl("");
+        setUploadedImageOrientation("landscape");
         setImageUploadStatus(data.error ?? "Upload gambar gagal.");
         return;
       }
 
-      setUploadedImageUrl(data.url);
+      const orientation = data.orientation === "portrait" ? "portrait" : "landscape";
+      setUploadedImageOrientation(orientation);
+      setUploadedImageUrl(withImageOrientationMarker(data.url, orientation));
 
       if (data.optimized && data.originalSize && data.finalSize) {
         const savedPercent = Math.max(
@@ -143,6 +163,7 @@ export default function TulisThreadPage() {
       }
     } catch {
       setUploadedImageUrl("");
+      setUploadedImageOrientation("landscape");
       setImageUploadStatus("Upload gagal, coba lagi.");
     } finally {
       setIsUploadingImage(false);
@@ -200,6 +221,7 @@ export default function TulisThreadPage() {
 
     if (type !== "image") {
       setUploadedImageUrl("");
+      setUploadedImageOrientation("landscape");
       setImageUploadStatus("");
       setIsUploadingImage(false);
     }
@@ -237,6 +259,18 @@ export default function TulisThreadPage() {
     event.preventDefault();
     event.stopPropagation();
     handleMediaTypeChange(type);
+  }
+
+  function handleUploadedImageLoad(event: SyntheticEvent<HTMLImageElement>) {
+    const image = event.currentTarget;
+
+    if (!image.naturalWidth || !image.naturalHeight) {
+      return;
+    }
+
+    setUploadedImageOrientation(
+      image.naturalHeight > image.naturalWidth ? "portrait" : "landscape"
+    );
   }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -446,7 +480,12 @@ export default function TulisThreadPage() {
                     <img
                       src={uploadedImageUrl}
                       alt="Preview upload"
-                      className="h-40 w-full rounded-lg border border-[#6d4a24]/20 object-cover"
+                      onLoad={handleUploadedImageLoad}
+                      className={`w-full rounded-lg border border-[#6d4a24]/20 ${
+                        uploadedImageOrientation === "portrait"
+                          ? "h-56 bg-[#f8efe3] p-1 object-contain"
+                          : "h-40 object-cover"
+                      }`}
                     />
                   )}
                 </div>
@@ -541,7 +580,16 @@ export default function TulisThreadPage() {
 
             {mediaType === "image" && uploadedImageUrl && (
               <figure className="mt-3 overflow-hidden rounded-lg border border-[#6b4923]/25 bg-white">
-                <img src={uploadedImageUrl} alt="Preview sisipan gambar" className="h-40 w-full object-cover" />
+                <img
+                  src={uploadedImageUrl}
+                  alt="Preview sisipan gambar"
+                  onLoad={handleUploadedImageLoad}
+                  className={`w-full ${
+                    uploadedImageOrientation === "portrait"
+                      ? "h-56 bg-[#f8efe3] p-1 object-contain"
+                      : "h-40 object-cover"
+                  }`}
+                />
               </figure>
             )}
 

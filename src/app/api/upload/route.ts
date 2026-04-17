@@ -5,6 +5,7 @@ import sharp from "sharp";
 import { NextResponse } from "next/server";
 
 import { getSupabaseAdminClient } from "@/lib/supabase-admin";
+import type { ImageOrientation } from "@/lib/image-orientation";
 
 const MAX_UPLOAD_SIZE = 8 * 1024 * 1024;
 const MAX_IMAGE_DIMENSION = 2200;
@@ -32,6 +33,7 @@ type OptimizedImage = {
   mimeType: string;
   extension: string;
   optimized: boolean;
+  orientation: ImageOrientation;
 };
 
 async function optimizeImage(buffer: Buffer, mimeType: string): Promise<OptimizedImage> {
@@ -84,11 +86,15 @@ async function optimizeImage(buffer: Buffer, mimeType: string): Promise<Optimize
     (metadata.width ?? 0) > MAX_IMAGE_DIMENSION ||
     (metadata.height ?? 0) > MAX_IMAGE_DIMENSION;
 
+  const orientation: ImageOrientation =
+    (metadata.height ?? 0) > (metadata.width ?? 0) ? "portrait" : "landscape";
+
   return {
     buffer: useOptimized ? optimizedBuffer : buffer,
     mimeType,
     extension: originalExtension,
     optimized: useOptimized,
+    orientation,
   };
 }
 
@@ -148,6 +154,7 @@ export async function POST(request: Request) {
       {
         url: publicData.publicUrl,
         optimized: optimized.optimized,
+        orientation: optimized.orientation,
         originalSize: buffer.length,
         finalSize: optimized.buffer.length,
       },

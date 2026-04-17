@@ -303,14 +303,14 @@ body {
 }
 
 .note-media-image-portrait {
-  padding: 0.16rem;
+  padding: 0;
 }
 
 .note-media-image-portrait img {
-  aspect-ratio: 4 / 3;
+  aspect-ratio: 16 / 6;
   object-fit: contain;
   background: rgba(255, 255, 255, 0.72);
-  border-radius: 0.3rem;
+  border-radius: 0;
 }
 
 .note-media-image figcaption {
