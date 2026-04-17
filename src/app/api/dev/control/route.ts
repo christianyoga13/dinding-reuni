@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdminClient } from "@/lib/supabase-admin";
 import {
   parseThreadsPerSegment,
+  THREADS_PER_SEGMENT_CONFIG_KEY,
   THREADS_PER_SEGMENT_COOKIE,
 } from "@/lib/thread-layout";
 
@@ -50,6 +51,41 @@ export async function POST(request: NextRequest) {
     }
 
     const value = parseThreadsPerSegment(String(rawValue));
+
+    try {
+      const supabase = getSupabaseAdminClient();
+      const { error } = await supabase.from("app_config").upsert(
+        {
+          key: THREADS_PER_SEGMENT_CONFIG_KEY,
+          value: String(value),
+        },
+        {
+          onConflict: "key",
+        }
+      );
+
+      if (error) {
+        return NextResponse.json(
+          {
+            error:
+              "Gagal menyimpan pengaturan global. Pastikan tabel public.app_config sudah dibuat (lihat supabase/app_config.sql).",
+            detail: error.message,
+          },
+          { status: 500 }
+        );
+      }
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : "Unknown error";
+      return NextResponse.json(
+        {
+          error:
+            "Server gagal menyimpan pengaturan global. Pastikan tabel public.app_config sudah dibuat (lihat supabase/app_config.sql).",
+          detail,
+        },
+        { status: 500 }
+      );
+    }
+
     const response = NextResponse.json({
       message: "Pengaturan thread per screen berhasil disimpan.",
       threadsPerSegment: value,

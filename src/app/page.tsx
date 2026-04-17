@@ -5,7 +5,9 @@ import WriteThreadQr from "./components/write-thread-qr";
 import ThreadScatter from "@/app/components/thread-scatter";
 import { getSupabaseAdminClient } from "@/lib/supabase-admin";
 import {
+  DEFAULT_THREADS_PER_SEGMENT,
   parseThreadsPerSegment,
+  THREADS_PER_SEGMENT_CONFIG_KEY,
   THREADS_PER_SEGMENT_COOKIE,
   type ThreadsPerSegment,
 } from "@/lib/thread-layout";
@@ -727,11 +729,30 @@ async function getThreadNotes(threadsPerSegment: ThreadsPerSegment): Promise<Thr
   }
 }
 
-export default async function Home() {
+async function getThreadsPerSegmentSetting(): Promise<ThreadsPerSegment> {
+  try {
+    const supabase = getSupabaseAdminClient();
+    const { data, error } = await supabase
+      .from("app_config")
+      .select("value")
+      .eq("key", THREADS_PER_SEGMENT_CONFIG_KEY)
+      .maybeSingle();
+
+    if (!error && data?.value) {
+      return parseThreadsPerSegment(String(data.value));
+    }
+  } catch {
+    // Fallback below when app_config table is not ready.
+  }
+
   const cookieStore = await cookies();
-  const threadsPerSegment = parseThreadsPerSegment(
-    cookieStore.get(THREADS_PER_SEGMENT_COOKIE)?.value
+  return parseThreadsPerSegment(
+    cookieStore.get(THREADS_PER_SEGMENT_COOKIE)?.value ?? String(DEFAULT_THREADS_PER_SEGMENT)
   );
+}
+
+export default async function Home() {
+  const threadsPerSegment = await getThreadsPerSegmentSetting();
 
   const threadNotes = await getThreadNotes(threadsPerSegment);
   const notes = threadNotes;

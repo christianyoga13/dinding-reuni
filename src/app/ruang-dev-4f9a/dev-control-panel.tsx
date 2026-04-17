@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useState } from "react";
 
 import type { ThreadsPerSegment } from "@/lib/thread-layout";
@@ -61,7 +60,11 @@ export default function DevControlPanel({
         threadsPerSegment,
       });
 
-      setStatus(result.message ?? "Pengaturan berhasil disimpan.");
+      if (result.threadsPerSegment === 75 || result.threadsPerSegment === 100) {
+        setThreadsPerSegment(result.threadsPerSegment);
+      }
+
+      setStatus(`${result.message ?? "Pengaturan berhasil disimpan."} Klik Kembali untuk lihat hasil terbaru.`);
     } catch (error) {
       const message = error instanceof Error ? error.message : "Gagal menyimpan pengaturan.";
       setStatus(message);
@@ -104,12 +107,13 @@ export default function DevControlPanel({
       <section className="mx-auto w-full max-w-2xl rounded-2xl border border-[#654421]/30 bg-white/90 p-4 shadow-xl shadow-[#4d3215]/10 sm:p-6">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <h1 className="font-new-romantics text-4xl text-[#3a248d] sm:text-5xl">Ruang Dev</h1>
-          <Link
-            href="/"
+          <button
+            type="button"
+            onClick={() => window.location.assign("/")}
             className="rounded-full border border-[#6e4a22]/30 bg-white/80 px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.1em] text-[#52361a] transition hover:bg-white"
           >
             Kembali
-          </Link>
+          </button>
         </div>
 
         <p className="mt-2 text-sm text-[#5c4227]">
