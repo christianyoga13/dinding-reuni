@@ -74,7 +74,7 @@ type PlacementRect = {
   height: number;
 };
 
-const THREADS_PER_SEGMENT = 100;
+const THREADS_PER_SEGMENT = 75;
 const BASE_SEGMENT_HEIGHT_PX = 1080;
 const SEGMENT_VIEWPORT_OFFSET_PX = 220;
 const CANVAS_WIDTH_PX = 1920;

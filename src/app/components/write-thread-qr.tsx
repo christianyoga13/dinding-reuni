@@ -3,19 +3,20 @@
 import Link from "next/link";
 
 const WRITE_THREAD_PATH = "/tulis";
+const PRODUCTION_WRITE_THREAD_URL = "https://dinding-reuni.vercel.app/tulis";
 const QR_SERVICE_URL = "https://api.qrserver.com/v1/create-qr-code/";
 
 function resolveQrTarget(): string {
   const siteUrl = process.env.NEXT_PUBLIC_SITE_URL?.trim();
 
   if (!siteUrl) {
-    return WRITE_THREAD_PATH;
+    return PRODUCTION_WRITE_THREAD_URL;
   }
 
   try {
     return new URL(WRITE_THREAD_PATH, siteUrl).toString();
   } catch {
-    return WRITE_THREAD_PATH;
+    return PRODUCTION_WRITE_THREAD_URL;
   }
 }
 

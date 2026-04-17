@@ -228,7 +228,7 @@ const fallbackNotes: ThreadNote[] = [
   },
 ];
 
-const THREADS_PER_SEGMENT = 100;
+const THREADS_PER_SEGMENT = 75;
 const SEGMENT_HEIGHT_PX = 1080;
 const TOP_GUTTER_PX = 12;
 const BOTTOM_GUTTER_PX = 22;
