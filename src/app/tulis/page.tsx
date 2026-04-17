@@ -288,14 +288,13 @@ export default function TulisThreadPage() {
         return;
       }
 
-      const createdId = data.thread?.id;
-      if (createdId) {
-        router.push(`/?newThreadId=${encodeURIComponent(createdId)}`);
-        return;
-      }
+      const createdId = data.thread?.id?.trim();
+      const redirectTarget = createdId
+        ? `/?newThreadId=${encodeURIComponent(createdId)}`
+        : `/?newThread=1`;
 
-      setStatus(data.message ?? "Thread berhasil disimpan ke database.");
-      resetForm();
+      router.push(redirectTarget);
+      return;
     } catch {
       setStatus("Gagal terhubung ke server database. Coba lagi.");
     } finally {

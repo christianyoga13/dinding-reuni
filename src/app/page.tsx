@@ -1,5 +1,6 @@
 import Link from "next/link";
 
+import WriteThreadQr from "./components/write-thread-qr";
 import ThreadScatter from "@/app/components/thread-scatter";
 import { getSupabaseAdminClient } from "@/lib/supabase-admin";
 
@@ -40,10 +41,12 @@ type ThreadRow = {
   music_preview_url: string | null;
   music_external_url: string | null;
   music_provider: string | null;
+  created_at: string;
 };
 
 type ThreadNote = {
   id: string;
+  createdAt?: string;
   thread: string;
   message: string;
   author: string;
@@ -226,14 +229,15 @@ const fallbackNotes: ThreadNote[] = [
 ];
 
 const THREADS_PER_SEGMENT = 100;
-const SEGMENT_HEIGHT_PX = 1020;
+const SEGMENT_HEIGHT_PX = 1080;
 const TOP_GUTTER_PX = 12;
 const BOTTOM_GUTTER_PX = 22;
 const CANVAS_WIDTH_PX = 1920;
 const SIDE_GUTTER_PX = 22;
-const MAX_PLACEMENT_TRIES = 96;
-const MAX_SINGLE_OVERLAP_RATIO = 0.14;
-const MAX_TOTAL_OVERLAP_RATIO = 0.28;
+const COLLISION_PADDING_PX = 10;
+const MAX_PLACEMENT_TRIES = 140;
+const MAX_SINGLE_OVERLAP_RATIO = 0.09;
+const MAX_TOTAL_OVERLAP_RATIO = 0.18;
 
 function hashString(input: string): number {
   let hash = 2166136261;
@@ -334,8 +338,16 @@ function estimateCardHeightPx(size: ThreadNote["size"], mediaType: ThreadRow["me
 }
 
 function overlapArea(a: PlacementRect, b: PlacementRect): number {
-  const xOverlap = Math.max(0, Math.min(a.x + a.width, b.x + b.width) - Math.max(a.x, b.x));
-  const yOverlap = Math.max(0, Math.min(a.y + a.height, b.y + b.height) - Math.max(a.y, b.y));
+  const xOverlap = Math.max(
+    0,
+    Math.min(a.x + a.width + COLLISION_PADDING_PX, b.x + b.width + COLLISION_PADDING_PX) -
+      Math.max(a.x - COLLISION_PADDING_PX, b.x - COLLISION_PADDING_PX)
+  );
+  const yOverlap = Math.max(
+    0,
+    Math.min(a.y + a.height + COLLISION_PADDING_PX, b.y + b.height + COLLISION_PADDING_PX) -
+      Math.max(a.y - COLLISION_PADDING_PX, b.y - COLLISION_PADDING_PX)
+  );
 
   return xOverlap * yOverlap;
 }
@@ -599,7 +611,7 @@ function mapRowsToNotes(rows: ThreadRow[]): ThreadNote[] {
         bestCandidate = candidate;
       }
 
-      const relax = attempt > MAX_PLACEMENT_TRIES * 0.74 ? 1.14 : 1;
+      const relax = attempt > MAX_PLACEMENT_TRIES * 0.8 ? 1.08 : 1;
       if (isAcceptableOverlap(metrics, relax)) {
         chosenX = candidate.x;
         chosenY = candidate.y;
@@ -645,6 +657,7 @@ function mapRowsToNotes(rows: ThreadRow[]): ThreadNote[] {
 
     notes.push({
       id: row.id,
+      createdAt: row.created_at,
       thread: row.title,
       message: row.message,
       author: row.author_name,
@@ -671,7 +684,7 @@ async function getThreadNotes(): Promise<ThreadNote[]> {
     const { data, error } = await supabase
       .from("threads")
       .select(
-        "id,title,message,author_name,batch_year,tag_label,media_type,image_url,music_track,music_artist,music_image_url,music_preview_url,music_external_url,music_provider"
+        "id,title,message,author_name,batch_year,tag_label,media_type,image_url,music_track,music_artist,music_image_url,music_preview_url,music_external_url,music_provider,created_at"
       )
       .order("created_at", { ascending: false })
       .limit(500);
@@ -680,7 +693,7 @@ async function getThreadNotes(): Promise<ThreadNote[]> {
       const legacy = await supabase
         .from("threads")
         .select(
-          "id,title,message,author_name,batch_year,tag_label,media_type,image_url,music_track,music_artist,music_preview_url,music_external_url,music_provider"
+          "id,title,message,author_name,batch_year,tag_label,media_type,image_url,music_track,music_artist,music_preview_url,music_external_url,music_provider,created_at"
         )
         .order("created_at", { ascending: false })
         .limit(500);
@@ -725,11 +738,11 @@ export default async function Home() {
       <section className="board-wrap">
         <div className="board-frame">
           <div className="board-surface">
-            <header className="board-header" aria-label="Judul mading">
+            <header className="board-header flex-col items-center gap-2 sm:flex-row sm:gap-0" aria-label="Judul mading">
               <h1 className="board-title font-new-romantics">Dinding Reuni</h1>
               <Link
                 href="/tulis"
-                className="absolute right-0 top-1/2 -translate-y-1/2 rounded-full border border-white/50 bg-gradient-to-r from-[#5b43bf] to-[#f08b3f] px-4 py-2 text-xs font-semibold uppercase tracking-[0.12em] text-white shadow-lg shadow-black/20 transition hover:scale-[1.02]"
+                className="inline-flex w-full max-w-[13rem] items-center justify-center rounded-full border border-white/50 bg-gradient-to-r from-[#5b43bf] to-[#f08b3f] px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.1em] text-white shadow-lg shadow-black/20 transition hover:scale-[1.02] sm:absolute sm:right-0 sm:top-1/2 sm:w-auto sm:max-w-none sm:-translate-y-1/2 sm:px-4 sm:py-2 sm:text-xs sm:tracking-[0.12em]"
               >
                 Tulis Thread
               </Link>
@@ -739,6 +752,8 @@ export default async function Home() {
             </div>
           </div>
       </section>
+
+      <WriteThreadQr />
     </main>
   );
 }

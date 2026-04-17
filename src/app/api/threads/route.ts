@@ -41,6 +41,19 @@ type ThreadListItem = {
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+function parseSinceTimestamp(value: string | null): string | null {
+  if (!value) {
+    return null;
+  }
+
+  const parsedMs = Date.parse(value);
+  if (!Number.isFinite(parsedMs)) {
+    return null;
+  }
+
+  return new Date(parsedMs).toISOString();
+}
+
 export async function GET(request: Request) {
   try {
     const url = new URL(request.url);
@@ -48,24 +61,35 @@ export async function GET(request: Request) {
     const limit = Number.isFinite(parsedLimit)
       ? Math.min(Math.max(parsedLimit, 1), 500)
       : 300;
+    const sinceIso = parseSinceTimestamp(url.searchParams.get("since"));
 
     const supabase = getSupabaseAdminClient();
-    const { data, error } = await supabase
+    let query = supabase
       .from("threads")
       .select(
         "id,title,message,author_name,batch_year,tag_label,media_type,image_url,music_track,music_artist,music_image_url,music_preview_url,music_external_url,music_provider,created_at"
       )
-      .order("created_at", { ascending: false })
-      .limit(limit);
+      .order("created_at", { ascending: false });
+
+    if (sinceIso) {
+      query = query.gt("created_at", sinceIso);
+    }
+
+    const { data, error } = await query.limit(limit);
 
     if (error && error.message.includes("music_image_url")) {
-      const legacy = await supabase
+      let legacyQuery = supabase
         .from("threads")
         .select(
           "id,title,message,author_name,batch_year,tag_label,media_type,image_url,music_track,music_artist,music_preview_url,music_external_url,music_provider,created_at"
         )
-        .order("created_at", { ascending: false })
-        .limit(limit);
+        .order("created_at", { ascending: false });
+
+      if (sinceIso) {
+        legacyQuery = legacyQuery.gt("created_at", sinceIso);
+      }
+
+      const legacy = await legacyQuery.limit(limit);
 
       if (legacy.error) {
         return NextResponse.json(
@@ -238,7 +262,8 @@ export async function POST(request: Request) {
       .single();
 
     if (error && error.message.includes("music_image_url")) {
-      const { music_image_url: _, ...legacyInsertPayload } = insertPayload;
+      const { music_image_url: removedMusicImageUrl, ...legacyInsertPayload } = insertPayload;
+      void removedMusicImageUrl;
 
       const legacy = await supabase
         .from("threads")
