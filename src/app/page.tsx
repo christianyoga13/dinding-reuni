@@ -1,6 +1,6 @@
-import type { CSSProperties } from "react";
 import Link from "next/link";
 
+import ThreadScatter from "@/app/components/thread-scatter";
 import { getSupabaseAdminClient } from "@/lib/supabase-admin";
 
 export const dynamic = "force-dynamic";
@@ -226,15 +226,14 @@ const fallbackNotes: ThreadNote[] = [
 ];
 
 const THREADS_PER_SEGMENT = 100;
-const SEGMENT_HEIGHT_PX = 980;
-const GRID_COLUMNS = 10;
-const GRID_ROWS = 10;
-const TOP_GUTTER_PX = 20;
-const ROW_GAP_PX = 90;
-const LEFT_GUTTER_PERCENT = 2.8;
-const CELL_WIDTH_PERCENT = 9.35;
-const MIN_LEFT_PERCENT = 1.2;
-const MAX_LEFT_PERCENT = 88.8;
+const SEGMENT_HEIGHT_PX = 1020;
+const TOP_GUTTER_PX = 12;
+const BOTTOM_GUTTER_PX = 22;
+const CANVAS_WIDTH_PX = 1920;
+const SIDE_GUTTER_PX = 22;
+const MAX_PLACEMENT_TRIES = 96;
+const MAX_SINGLE_OVERLAP_RATIO = 0.14;
+const MAX_TOTAL_OVERLAP_RATIO = 0.28;
 
 function hashString(input: string): number {
   let hash = 2166136261;
@@ -258,16 +257,120 @@ function mulberry32(seed: number) {
   };
 }
 
-function shuffledRange(length: number, seed: number): number[] {
-  const values = Array.from({ length }, (_, index) => index);
-  const random = mulberry32(seed);
+type PlacementRect = {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+};
 
-  for (let i = values.length - 1; i > 0; i -= 1) {
-    const j = Math.floor(random() * (i + 1));
-    [values[i], values[j]] = [values[j], values[i]];
+type OverlapMetrics = {
+  maxSingleRatio: number;
+  totalRatio: number;
+};
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(Math.max(value, min), max);
+}
+
+function estimateCardWidthPx(size: ThreadNote["size"], hasMedia: boolean): number {
+  if (hasMedia) {
+    if (size === "lg") {
+      return 182;
+    }
+
+    if (size === "md") {
+      return 168;
+    }
+
+    return 154;
   }
 
-  return values;
+  if (size === "lg") {
+    return 166;
+  }
+
+  if (size === "md") {
+    return 150;
+  }
+
+  return 138;
+}
+
+function estimateCardHeightPx(size: ThreadNote["size"], mediaType: ThreadRow["media_type"]): number {
+  if (mediaType === "music") {
+    if (size === "lg") {
+      return 176;
+    }
+
+    if (size === "md") {
+      return 160;
+    }
+
+    return 146;
+  }
+
+  if (mediaType === "image") {
+    if (size === "lg") {
+      return 170;
+    }
+
+    if (size === "md") {
+      return 154;
+    }
+
+    return 140;
+  }
+
+  if (size === "lg") {
+    return 118;
+  }
+
+  if (size === "md") {
+    return 106;
+  }
+
+  return 96;
+}
+
+function overlapArea(a: PlacementRect, b: PlacementRect): number {
+  const xOverlap = Math.max(0, Math.min(a.x + a.width, b.x + b.width) - Math.max(a.x, b.x));
+  const yOverlap = Math.max(0, Math.min(a.y + a.height, b.y + b.height) - Math.max(a.y, b.y));
+
+  return xOverlap * yOverlap;
+}
+
+function getOverlapMetrics(candidate: PlacementRect, placedRects: PlacementRect[]): OverlapMetrics {
+  const candidateArea = candidate.width * candidate.height;
+  let totalOverlapArea = 0;
+  let maxSingleRatio = 0;
+
+  for (const existing of placedRects) {
+    const overlap = overlapArea(candidate, existing);
+
+    if (overlap === 0) {
+      continue;
+    }
+
+    const singleRatio = overlap / Math.min(candidateArea, existing.width * existing.height);
+    if (singleRatio > maxSingleRatio) {
+      maxSingleRatio = singleRatio;
+    }
+
+    totalOverlapArea += overlap;
+  }
+
+  return {
+    maxSingleRatio,
+    totalRatio: totalOverlapArea / candidateArea,
+  };
+}
+
+function isAcceptableOverlap(metrics: OverlapMetrics, relaxFactor = 1): boolean {
+  return (
+    metrics.maxSingleRatio <= MAX_SINGLE_OVERLAP_RATIO * relaxFactor &&
+    metrics.totalRatio <= MAX_TOTAL_OVERLAP_RATIO * relaxFactor
+  );
 }
 
 type ITunesLookupResult = {
@@ -417,41 +520,108 @@ async function hydrateMissingMusicCovers(
 }
 
 function mapRowsToNotes(rows: ThreadRow[]): ThreadNote[] {
-  return rows.map((row, index) => {
+  const notes: ThreadNote[] = [];
+  const placedBySegment = new Map<number, PlacementRect[]>();
+  const randomBySegment = new Map<number, () => number>();
+
+  for (let index = 0; index < rows.length; index += 1) {
+    const row = rows[index];
     const segment = Math.floor(index / THREADS_PER_SEGMENT);
     const localIndex = index % THREADS_PER_SEGMENT;
-    const gridRow = Math.floor(localIndex / GRID_COLUMNS) % GRID_ROWS;
-    const slotInRow = localIndex % GRID_COLUMNS;
 
-    const baseSeed = hashString(`${row.id}:${index}`);
-    const random = mulberry32(baseSeed);
+    let random = randomBySegment.get(segment);
+    if (!random) {
+      random = mulberry32(hashString(`segment-layout:${segment}`));
+      randomBySegment.set(segment, random);
+    }
 
-    const rowSeed = hashString(`segment:${segment}:row:${gridRow}`);
-    const columnOrder = shuffledRange(GRID_COLUMNS, rowSeed);
-    const gridCol = columnOrder[slotInRow];
-
-    const jitterX = (random() - 0.5) * 3.8;
-    const jitterY = (random() - 0.5) * 20;
-
-    const leftRaw = LEFT_GUTTER_PERCENT + gridCol * CELL_WIDTH_PERCENT + jitterX;
-    const left = Math.max(MIN_LEFT_PERCENT, Math.min(MAX_LEFT_PERCENT, leftRaw));
-
-    const top =
-      segment * SEGMENT_HEIGHT_PX +
-      TOP_GUTTER_PX +
-      gridRow * ROW_GAP_PX +
-      jitterY;
-
+    const hasRichMedia = row.media_type !== "none";
     const sizeRoll = random();
-    const size: ThreadNote["size"] = sizeRoll > 0.84 ? "lg" : sizeRoll > 0.52 ? "md" : "sm";
+    const size: ThreadNote["size"] = hasRichMedia
+      ? sizeRoll > 0.9
+        ? "lg"
+        : sizeRoll > 0.44
+          ? "md"
+          : "sm"
+      : sizeRoll > 0.95
+        ? "lg"
+        : sizeRoll > 0.5
+          ? "md"
+          : "sm";
+
+    const widthPx = estimateCardWidthPx(size, hasRichMedia);
+    const heightPx = estimateCardHeightPx(size, row.media_type);
+
+    const placedRects = placedBySegment.get(segment) ?? [];
+    if (!placedBySegment.has(segment)) {
+      placedBySegment.set(segment, placedRects);
+    }
+
+    const minX = SIDE_GUTTER_PX;
+    const maxX = CANVAS_WIDTH_PX - SIDE_GUTTER_PX - widthPx;
+    const minY = TOP_GUTTER_PX;
+    const maxY = SEGMENT_HEIGHT_PX - BOTTOM_GUTTER_PX - heightPx;
+
+    const driftY = Math.min(localIndex * 2.05, (SEGMENT_HEIGHT_PX - heightPx) * 0.45);
+
+    let chosenX = minX + random() * Math.max(1, maxX - minX);
+    let chosenY = minY + random() * Math.max(1, maxY - minY);
+    let placementLocked = false;
+    let bestCandidate: PlacementRect | null = null;
+    let bestCandidateScore = Number.POSITIVE_INFINITY;
+
+    for (let attempt = 0; attempt < MAX_PLACEMENT_TRIES; attempt += 1) {
+      const x = minX + random() * Math.max(1, maxX - minX);
+
+      const yBandMax = Math.max(minY + 1, maxY - driftY * 0.4);
+      const yBase = minY + random() * Math.max(1, yBandMax - minY);
+      const y = clamp(yBase + driftY * random(), minY, maxY);
+
+      const wave = Math.sin((x / CANVAS_WIDTH_PX) * Math.PI * 2 + segment * 0.67) * 7;
+      const yAdjusted = clamp(y + wave, minY, maxY);
+
+      const candidate: PlacementRect = {
+        x,
+        y: yAdjusted,
+        width: widthPx,
+        height: heightPx,
+      };
+
+      const metrics = getOverlapMetrics(candidate, placedRects);
+      const score =
+        metrics.maxSingleRatio * 2.8 +
+        metrics.totalRatio * 1.8 +
+        Math.max(0, metrics.maxSingleRatio - MAX_SINGLE_OVERLAP_RATIO) * 4 +
+        Math.max(0, metrics.totalRatio - MAX_TOTAL_OVERLAP_RATIO) * 2.2;
+
+      if (score < bestCandidateScore) {
+        bestCandidateScore = score;
+        bestCandidate = candidate;
+      }
+
+      const relax = attempt > MAX_PLACEMENT_TRIES * 0.74 ? 1.14 : 1;
+      if (isAcceptableOverlap(metrics, relax)) {
+        chosenX = candidate.x;
+        chosenY = candidate.y;
+        placedRects.push(candidate);
+        placementLocked = true;
+        break;
+      }
+    }
+
+    if (!placementLocked && bestCandidate) {
+      chosenX = bestCandidate.x;
+      chosenY = bestCandidate.y;
+      placedRects.push(bestCandidate);
+    }
 
     const toneRoll = random();
     const tone: ThreadNote["tone"] =
       toneRoll > 0.66 ? "cream" : toneRoll > 0.33 ? "orange" : "purple";
 
-    const rotate = Math.round((random() - 0.5) * 8);
-    const delay = `${Math.round(random() * 1200)}ms`;
-    const duration = `${(7.4 + random() * 2.9).toFixed(2)}s`;
+    const rotate = Math.round((random() - 0.5) * (hasRichMedia ? 7 : 9));
+    const delay = `${Math.round(random() * 1400)}ms`;
+    const duration = `${(8.1 + random() * 2.8).toFixed(2)}s`;
 
     let media: NoteMedia = { kind: "none" };
 
@@ -473,24 +643,26 @@ function mapRowsToNotes(rows: ThreadRow[]): ThreadNote[] {
       };
     }
 
-    return {
+    notes.push({
       id: row.id,
       thread: row.title,
       message: row.message,
       author: row.author_name,
       year: String(row.batch_year),
       chip: row.tag_label,
-      left: `${left.toFixed(2)}%`,
-      top: `${Math.max(0, Math.round(top))}px`,
+      left: `${((chosenX / CANVAS_WIDTH_PX) * 100).toFixed(2)}%`,
+      top: `${Math.max(0, Math.round(segment * SEGMENT_HEIGHT_PX + chosenY))}px`,
       rotate,
       delay,
       duration,
       size,
       tone,
       media,
-      zIndex: rows.length - index,
-    };
-  });
+      zIndex: 1000 - localIndex,
+    });
+  }
+
+  return notes;
 }
 
 async function getThreadNotes(): Promise<ThreadNote[]> {
@@ -563,106 +735,7 @@ export default async function Home() {
               </Link>
             </header>
 
-            <section
-              className="notes-scatter"
-              aria-label="Kumpulan thread kesan pesan"
-              style={{ minHeight: `${scatterMinHeight}px` }}
-            >
-              {notes.length === 0 && (
-                <article className="thread-note">
-                  <div className="thread-note-card thread-note-cream note-md">
-                    <div className="note-pin" aria-hidden="true" />
-                    <div className="thread-topline">
-                      <p>Belum Ada Thread</p>
-                      <span>Info</span>
-                    </div>
-                    <p className="note-message">
-                      Data thread dari database belum ada atau koneksi database belum siap.
-                    </p>
-                    <p className="note-meta">Tambahkan dari tombol Tulis Thread</p>
-                    <span className="note-chip">Database</span>
-                  </div>
-                </article>
-              )}
-
-              {notes.map((note, index) => {
-                const placementStyle: CSSProperties = {
-                  left: note.left,
-                  top: note.top,
-                  animationDelay: note.delay,
-                  animationDuration: note.duration,
-                  zIndex: note.zIndex ?? 1,
-                };
-
-                const cardStyle: CSSProperties = {
-                  transform: `rotate(${note.rotate}deg)`,
-                };
-
-                const hasMedia = note.media.kind !== "none";
-
-                return (
-                  <article key={note.id} className="thread-note" style={placementStyle}>
-                    <div
-                      className={`thread-note-card thread-note-${note.tone} note-${note.size} note-tilt-${(index % 6) + 1} ${hasMedia ? "thread-note-with-media" : ""}`}
-                      style={cardStyle}
-                    >
-                      <div className="note-pin" aria-hidden="true" />
-                      <div className="thread-topline">
-                        <p>{note.thread}</p>
-                        <span>{note.year}</span>
-                      </div>
-                      <p className="note-message">{note.message}</p>
-
-                      {note.media.kind === "image" && (
-                        <figure className="note-media note-media-image">
-                          <img src={note.media.imageUrl} alt={`Foto untuk ${note.thread}`} loading="lazy" />
-                          <figcaption>{note.media.caption}</figcaption>
-                        </figure>
-                      )}
-
-                      {note.media.kind === "music" && (
-                        <div className="note-media note-media-music">
-                          <div className="music-mini-layout">
-                            {note.media.coverUrl ? (
-                              <img
-                                src={note.media.coverUrl}
-                                alt={`Cover ${note.media.track}`}
-                                className="music-mini-cover"
-                                loading="lazy"
-                              />
-                            ) : (
-                              <div className="music-mini-cover music-mini-cover-placeholder" aria-hidden="true" />
-                            )}
-                            <div className="music-mini-info">
-                              <p className="spotify-mini-title">{note.media.track}</p>
-                              <p className="spotify-mini-artist">{note.media.artist}</p>
-                              <p className="music-provider-label">{note.media.provider}</p>
-                            </div>
-                          </div>
-                          {note.media.previewUrl ? (
-                            <audio className="music-audio" controls preload="none" src={note.media.previewUrl} />
-                          ) : note.media.externalUrl ? (
-                            <a
-                              href={note.media.externalUrl}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="music-open-link"
-                            >
-                              Buka di {note.media.provider}
-                            </a>
-                          ) : (
-                            <p className="mt-2 text-[11px] text-[#31204e]/80">Preview tidak tersedia</p>
-                          )}
-                        </div>
-                      )}
-
-                      <p className="note-meta">{note.author}</p>
-                      <span className="note-chip">{note.chip}</span>
-                    </div>
-                  </article>
-                );
-              })}
-            </section>
+            <ThreadScatter notes={notes} scatterMinHeight={scatterMinHeight} />
             </div>
           </div>
       </section>

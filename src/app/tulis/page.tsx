@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { ChangeEvent, FormEvent, MouseEvent, TouchEvent, useMemo, useRef, useState } from "react";
 
 type MediaType = "none" | "image" | "music";
@@ -32,6 +33,7 @@ type DraftThread = {
 };
 
 export default function TulisThreadPage() {
+  const router = useRouter();
   const [threadTitle, setThreadTitle] = useState("");
   const [message, setMessage] = useState("");
   const [author, setAuthor] = useState("");
@@ -276,10 +278,19 @@ export default function TulisThreadPage() {
       const data = (await response.json()) as {
         message?: string;
         error?: string;
+        thread?: {
+          id?: string;
+        };
       };
 
       if (!response.ok) {
         setStatus(data.error ?? "Gagal menyimpan thread ke database.");
+        return;
+      }
+
+      const createdId = data.thread?.id;
+      if (createdId) {
+        router.push(`/?newThreadId=${encodeURIComponent(createdId)}`);
         return;
       }
 
