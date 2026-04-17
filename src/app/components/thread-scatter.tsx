@@ -1,6 +1,6 @@
 "use client";
 
-import type { CSSProperties, KeyboardEvent } from "react";
+import type { CSSProperties, KeyboardEvent, SyntheticEvent } from "react";
 import { useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import type { ThreadsPerSegment } from "@/lib/thread-layout";
@@ -50,6 +50,7 @@ type ThreadScatterProps = {
 };
 
 type HighlightKind = "long" | "short";
+type ImageOrientation = "portrait" | "landscape";
 
 type ThreadApiItem = {
   id: string;
@@ -413,6 +414,9 @@ export default function ThreadScatter({
   const [frontOrderMap, setFrontOrderMap] = useState<Record<string, number>>({});
   const [highlightMap, setHighlightMap] = useState<Record<string, HighlightKind>>({});
   const [freshMap, setFreshMap] = useState<Record<string, true>>({});
+  const [imageOrientationMap, setImageOrientationMap] = useState<
+    Record<string, ImageOrientation>
+  >({});
 
   const frontCounterRef = useRef(0);
   const notesRef = useRef<ThreadNote[]>(notes);
@@ -504,6 +508,27 @@ export default function ThreadScatter({
 
       delete freshTimersRef.current[id];
     }, durationMs);
+  }
+
+  function handleNoteImageLoad(noteId: string, event: SyntheticEvent<HTMLImageElement>) {
+    const image = event.currentTarget;
+    if (!image.naturalWidth || !image.naturalHeight) {
+      return;
+    }
+
+    const orientation: ImageOrientation =
+      image.naturalHeight > image.naturalWidth ? "portrait" : "landscape";
+
+    setImageOrientationMap((previous) => {
+      if (previous[noteId] === orientation) {
+        return previous;
+      }
+
+      return {
+        ...previous,
+        [noteId]: orientation,
+      };
+    });
   }
 
   function revealThread(id: string, highlightDurationMs: number) {
@@ -776,6 +801,7 @@ export default function ThreadScatter({
         };
 
         const hasMedia = note.media.kind !== "none";
+        const imageOrientation = imageOrientationMap[note.id] ?? "landscape";
 
         return (
           <article
@@ -811,8 +837,17 @@ export default function ThreadScatter({
                 <p className="note-message">{note.message}</p>
 
                 {note.media.kind === "image" && (
-                  <figure className="note-media note-media-image">
-                    <img src={note.media.imageUrl} alt={`Foto untuk ${note.thread}`} loading="lazy" />
+                  <figure
+                    className={`note-media note-media-image ${
+                      imageOrientation === "portrait" ? "note-media-image-portrait" : ""
+                    }`}
+                  >
+                    <img
+                      src={note.media.imageUrl}
+                      alt={`Foto untuk ${note.thread}`}
+                      loading="lazy"
+                      onLoad={(event) => handleNoteImageLoad(note.id, event)}
+                    />
                     <figcaption>{note.media.caption}</figcaption>
                   </figure>
                 )}
