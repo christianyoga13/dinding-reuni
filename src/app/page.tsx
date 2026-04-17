@@ -1,8 +1,14 @@
 import Link from "next/link";
+import { cookies } from "next/headers";
 
 import WriteThreadQr from "./components/write-thread-qr";
 import ThreadScatter from "@/app/components/thread-scatter";
 import { getSupabaseAdminClient } from "@/lib/supabase-admin";
+import {
+  parseThreadsPerSegment,
+  THREADS_PER_SEGMENT_COOKIE,
+  type ThreadsPerSegment,
+} from "@/lib/thread-layout";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -228,7 +234,6 @@ const fallbackNotes: ThreadNote[] = [
   },
 ];
 
-const THREADS_PER_SEGMENT = 75;
 const SEGMENT_HEIGHT_PX = 1080;
 const TOP_GUTTER_PX = 12;
 const BOTTOM_GUTTER_PX = 22;
@@ -531,15 +536,15 @@ async function hydrateMissingMusicCovers(
   return Promise.all(rows.map((row) => hydrateMissingMusicCover(supabase, row)));
 }
 
-function mapRowsToNotes(rows: ThreadRow[]): ThreadNote[] {
+function mapRowsToNotes(rows: ThreadRow[], threadsPerSegment: ThreadsPerSegment): ThreadNote[] {
   const notes: ThreadNote[] = [];
   const placedBySegment = new Map<number, PlacementRect[]>();
   const randomBySegment = new Map<number, () => number>();
 
   for (let index = 0; index < rows.length; index += 1) {
     const row = rows[index];
-    const segment = Math.floor(index / THREADS_PER_SEGMENT);
-    const localIndex = index % THREADS_PER_SEGMENT;
+    const segment = Math.floor(index / threadsPerSegment);
+    const localIndex = index % threadsPerSegment;
 
     let random = randomBySegment.get(segment);
     if (!random) {
@@ -678,7 +683,7 @@ function mapRowsToNotes(rows: ThreadRow[]): ThreadNote[] {
   return notes;
 }
 
-async function getThreadNotes(): Promise<ThreadNote[]> {
+async function getThreadNotes(threadsPerSegment: ThreadsPerSegment): Promise<ThreadNote[]> {
   try {
     const supabase = getSupabaseAdminClient();
     const { data, error } = await supabase
@@ -708,7 +713,7 @@ async function getThreadNotes(): Promise<ThreadNote[]> {
         }));
 
       const hydratedLegacyRows = await hydrateMissingMusicCovers(supabase, legacyRows);
-      return mapRowsToNotes(hydratedLegacyRows);
+      return mapRowsToNotes(hydratedLegacyRows, threadsPerSegment);
     }
 
     if (error || !data) {
@@ -716,16 +721,21 @@ async function getThreadNotes(): Promise<ThreadNote[]> {
     }
 
     const hydratedRows = await hydrateMissingMusicCovers(supabase, data as ThreadRow[]);
-    return mapRowsToNotes(hydratedRows);
+    return mapRowsToNotes(hydratedRows, threadsPerSegment);
   } catch {
     return [];
   }
 }
 
 export default async function Home() {
-  const threadNotes = await getThreadNotes();
+  const cookieStore = await cookies();
+  const threadsPerSegment = parseThreadsPerSegment(
+    cookieStore.get(THREADS_PER_SEGMENT_COOKIE)?.value
+  );
+
+  const threadNotes = await getThreadNotes(threadsPerSegment);
   const notes = threadNotes;
-  const segmentCount = Math.max(1, Math.ceil(notes.length / THREADS_PER_SEGMENT));
+  const segmentCount = Math.max(1, Math.ceil(notes.length / threadsPerSegment));
   const scatterMinHeight = segmentCount * SEGMENT_HEIGHT_PX;
 
   return (
@@ -748,7 +758,11 @@ export default async function Home() {
               </Link>
             </header>
 
-            <ThreadScatter notes={notes} scatterMinHeight={scatterMinHeight} />
+            <ThreadScatter
+              notes={notes}
+              scatterMinHeight={scatterMinHeight}
+              threadsPerSegment={threadsPerSegment}
+            />
             </div>
           </div>
       </section>

@@ -3,6 +3,7 @@
 import type { CSSProperties, KeyboardEvent } from "react";
 import { useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import type { ThreadsPerSegment } from "@/lib/thread-layout";
 
 type NoteMedia =
   | {
@@ -45,6 +46,7 @@ type ThreadNote = {
 type ThreadScatterProps = {
   notes: ThreadNote[];
   scatterMinHeight: number;
+  threadsPerSegment: ThreadsPerSegment;
 };
 
 type HighlightKind = "long" | "short";
@@ -74,7 +76,6 @@ type PlacementRect = {
   height: number;
 };
 
-const THREADS_PER_SEGMENT = 75;
 const BASE_SEGMENT_HEIGHT_PX = 1080;
 const SEGMENT_VIEWPORT_OFFSET_PX = 220;
 const CANVAS_WIDTH_PX = 1920;
@@ -399,7 +400,11 @@ function createNoteFromApiItem(item: ThreadApiItem, existingNotes: ThreadNote[],
   };
 }
 
-export default function ThreadScatter({ notes, scatterMinHeight }: ThreadScatterProps) {
+export default function ThreadScatter({
+  notes,
+  scatterMinHeight,
+  threadsPerSegment,
+}: ThreadScatterProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -725,7 +730,7 @@ export default function ThreadScatter({ notes, scatterMinHeight }: ThreadScatter
     }
   }
 
-  const segmentCount = Math.max(1, Math.ceil(displayNotes.length / THREADS_PER_SEGMENT));
+  const segmentCount = Math.max(1, Math.ceil(displayNotes.length / threadsPerSegment));
   const resolvedScatterMinHeight = Math.max(scatterMinHeight, segmentCount * responsiveSegmentHeight);
 
   return (

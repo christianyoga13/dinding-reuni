@@ -594,15 +594,6 @@ export default function TulisThreadPage() {
             </span>
           </article>
 
-          <div className="mt-4 rounded-lg border border-[#6b4922]/20 bg-[#fff8ef] p-3 text-xs leading-relaxed text-[#604427]">
-            <p className="font-semibold uppercase tracking-[0.1em]">Tips penggunaan</p>
-            <ul className="mt-1 list-disc space-y-1 pl-4">
-              <li>Upload gambar langsung didukung hingga 8MB per file.</li>
-              <li>File gambar dioptimasi otomatis di backend sebelum disimpan.</li>
-              <li>Pilih 1 track dari hasil pencarian API gratis, tanpa login user.</li>
-              <li>Thread disimpan ke database Supabase lewat API server-side.</li>
-            </ul>
-          </div>
         </section>
       </div>
     </main>
